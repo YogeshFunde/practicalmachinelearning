@@ -9,22 +9,115 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## About Project
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here:[data] (http://groupware.les.inf.puc-rio.br/har) 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+## Step 1: Downloading data
 
-```{r cars}
-summary(cars)
+```{r echo=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","testing.csv")
+
+training <- read.csv("training.csv", na.strings = c("#DIV/0!", "NA", ""), stringsAsFactors = FALSE)
+testdata <- read.csv("testing.csv", na.strings = c("#DIV/0!", "NA", ""), stringsAsFactors = FALSE)
 ```
 
-## Including Plots
+Let us now look at the dimensions of data
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+dim(training); dim(testdata)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Step 2: Data Cleaning
+
+First seven columns in the training as well as test data are labels and not useful for predictions. These columns are removed.
+
+```{r , echo=FALSE}
+training <- training[, -c(1:7)]
+testdata <- testdata[, -c(1:7)]
+```
+
+We will now remove those columns which have more than 90 percent "NA" (missing) observations.
+
+```{r echo=TRUE}
+missCol <- sapply(training, function (x) mean(is.na(x))>0.90)
+training <- training[ ,!missCol]
+testdata <- testdata[ ,!missCol]
+dim(training); dim(testdata)
+```
+
+In training data, we have one response variable and 52 predictors. 
+
+## step 3: Creating Train and Test Datasets
+
+We will now create two datasets training and testing for further processing.
+
+```{r}
+library(caret)
+set.seed(12321)
+inTrain <- createDataPartition(training$classe, p=0.7, list = FALSE)
+training <- training[inTrain, ]
+testing <- training[-inTrain,]
+dim(training); dim(testing)
+```
+
+## Step 4: Training different Models and Testing Accuracy
+
+### Training classification tree model and testing its prediction accuracy.
+
+```{r}
+modCTree <- train(classe ~ ., data=training, method ="rpart")
+library(rattle)
+fancyRpartPlot(modCTree$finalModel)
+pred1 <- predict(modCTree, testing)
+confusionMatrix(as.factor(testing$classe), pred1)$overall[1]
+
+```
+
+as can be seen Accuracy of classification tree model is very poor. We will now train the other model.
+
+### Training LDA model and testing its prediction accuracy.
+
+```{r}
+set.seed(12321)
+modLDA <- train(classe ~ ., data=training, method ="lda")
+pred2 <- predict(modLDA, testing)
+confusionMatrix(as.factor(testing$classe), pred2)$overall[1]
+```
+As we can see that prediction using LDA has better accuracy of 70.26% on testing data. Let us now train other model.
+
+### Training Random Forest model and testing its prediction accuracy.
+
+```{r}
+modRF <- train(classe ~ ., data = training, ntree = 90, method = 'rf',trControl = trainControl(method = "cv", number = 5))
+confusionMatrix(as.factor(testing$classe), predict(modRF, testing))$overall[1]
+
+```
+
+As we can see Random Forest has the best accuracy, we will use random forest for predicting the cases.Though Random Forest may be indicating overfitting, I have used it for answering quiz and scored better compared to LDA.
+
+
+## Step 5: Predicting test cases using Random Forest
+The test cases are predicted using 52 predictors in Test data and resulting predictions is stored in problem_id column of test data.
+
+```{r}
+testdata$problem_id = predict(modRF,testdata[,-53])
+testdata$problem_id 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
